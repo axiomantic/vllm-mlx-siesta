@@ -8,15 +8,20 @@ listen_port = 8080
 upstream_host = "127.0.0.1"
 upstream_port = 8000
 
-# Command + args that launch your vllm-mlx process. Must bind to
-# upstream_host:upstream_port and expose health_probe_path (default: /v1/models).
-upstream_cmd = [
-    "vllm-mlx",
-    "serve",
-    "--model", "mlx-community/Qwen2.5-7B-Instruct-4bit",
-    "--host", "127.0.0.1",
-    "--port", "8000",
-]
+# The easy path: just name a model. Siesta synthesizes
+#   vllm-mlx serve --model <model> --host <upstream_host> --port <upstream_port>
+model = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+
+# The explicit path (takes precedence over `model` above). Uncomment to hand-roll
+# the command, e.g. for non-default flags or a different binary.
+# upstream_cmd = [
+#     "vllm-mlx",
+#     "serve",
+#     "--model", "mlx-community/Qwen2.5-7B-Instruct-4bit",
+#     "--host", "127.0.0.1",
+#     "--port", "8000",
+#     "--max-model-len", "8192",
+# ]
 
 # Optional extra env vars for the child process.
 [upstream_env]

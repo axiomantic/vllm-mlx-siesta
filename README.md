@@ -4,6 +4,51 @@ Idle-lifecycle reverse proxy for [vllm-mlx](https://github.com/waybarrios/vllm-m
 
 Keeps your model hot while you're actively using it, naps after a short idle, and frees the memory entirely after a longer idle. Next request either resumes the nap instantly or cold-starts fresh.
 
+## Quick install (one line, macOS)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/axiomantic/vllm-mlx-siesta/main/install.sh | bash
+```
+
+That will:
+
+1. Install `vllm-mlx-siesta` via `uv tool` (or `pipx` if `uv` isn't present; installs `pipx` via Homebrew if neither is).
+2. Write `~/.config/vllm-mlx-siesta/config.toml` with sensible defaults (`mlx-community/Qwen2.5-7B-Instruct-4bit`, listen `:8080`, upstream `:8000`, pause after 60s, unload after 600s).
+3. Render `~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist` and `launchctl load` it, so siesta starts at every login.
+
+After it finishes:
+
+```sh
+curl http://127.0.0.1:8080/healthz
+```
+
+You'll still need [vllm-mlx](https://github.com/waybarrios/vllm-mlx) itself on PATH. Siesta spawns it on demand but does not install it.
+
+### Pick a different model or ports
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/axiomantic/vllm-mlx-siesta/main/install.sh | bash -s -- \
+  --model mlx-community/Llama-3.3-70B-Instruct-4bit \
+  --listen-port 8080 --upstream-port 8000 \
+  --pause 60 --idle 600
+```
+
+All flags are optional. After install, edit `~/.config/vllm-mlx-siesta/config.toml` to tune further.
+
+### Skip LaunchAgent (install binary + config only)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/axiomantic/vllm-mlx-siesta/main/install.sh | bash -s -- --no-launchd
+```
+
+### Uninstall
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/axiomantic/vllm-mlx-siesta/main/install.sh | bash -s -- --uninstall
+```
+
+(Removes the LaunchAgent and the binary; leaves `~/.config/vllm-mlx-siesta/` in place so your settings aren't lost.)
+
 ## Why
 
 vllm-mlx gives high throughput on Apple Silicon but stays resident once loaded. On a workstation where you want both fast follow-ups *and* RAM back when you walk away, neither "always on" nor "always cold" is right. Siesta adds two knobs:
@@ -39,60 +84,47 @@ flowchart LR
 
 On each request: `siesta` resolves the current state, spawns or resumes the upstream as needed, increments an in-flight counter, streams the response, then decrements. An asyncio background task checks `now - last_activity` against `pause_after_seconds` and `idle_timeout_seconds` at `idle_check_interval_seconds` granularity.
 
-## Install
+## Running without the installer
 
-Requires Python 3.11+.
+### Install manually
 
 ```sh
-git clone https://github.com/axiomantic/vllm-mlx-siesta.git
-cd vllm-mlx-siesta
-pip install -e .
+uv tool install "git+https://github.com/axiomantic/vllm-mlx-siesta"
+# or
+pipx install "git+https://github.com/axiomantic/vllm-mlx-siesta"
+# or, editable dev install:
+git clone https://github.com/axiomantic/vllm-mlx-siesta && cd vllm-mlx-siesta && pip install -e .
 ```
 
-## Configure
+### Run
 
-Copy `examples/config.toml` and edit `upstream_cmd` to launch your vllm-mlx process. The example assumes vllm-mlx is on PATH.
+One-liner with `--model`:
 
-Resolution order: CLI flags > `SIESTA_*` env vars > TOML file > defaults.
+```sh
+vllm-mlx-siesta --model mlx-community/Qwen2.5-7B-Instruct-4bit
+```
 
-## Run
+Siesta synthesizes `vllm-mlx serve --model MODEL --host 127.0.0.1 --port 8000`. Add `--listen-port`, `--upstream-port`, `--pause-after-seconds`, `--idle-timeout-seconds` to tune.
+
+With a config file:
 
 ```sh
 vllm-mlx-siesta --config ~/.config/vllm-mlx-siesta/config.toml
 ```
 
-Or without a config file:
+Settings resolve in this order: CLI flags > `SIESTA_*` env vars > TOML file > built-in defaults. See [`examples/config.toml`](examples/config.toml) for the full set of options.
 
-```sh
-vllm-mlx-siesta \
-  --listen-port 8080 \
-  --upstream-port 8000 \
-  --pause-after-seconds 60 \
-  --idle-timeout-seconds 600 \
-  --upstream-cmd vllm-mlx serve --model mlx-community/Qwen2.5-7B-Instruct-4bit --host 127.0.0.1 --port 8000
-```
+Point any OpenAI-compatible client at `http://127.0.0.1:8080/v1/...`.
 
-Pass `--pause-after-seconds 0` (or set `pause_after_seconds = 0` in config) to disable the nap step and unload directly on idle.
-
-Point your OpenAI-compatible client at `http://127.0.0.1:8080/v1/...`.
-
-## LaunchAgent (start at login)
+### LaunchAgent without the installer
 
 ```sh
 mkdir -p ~/.config/vllm-mlx-siesta
-cp examples/config.toml ~/.config/vllm-mlx-siesta/config.toml
-# edit ~/.config/vllm-mlx-siesta/config.toml, then:
+cp examples/config.toml ~/.config/vllm-mlx-siesta/config.toml   # edit as needed
 ./launchd/install.sh
 ```
 
-Environment variables that customize the install: `SIESTA_BIN`, `CONFIG_PATH`, `LOG_DIR`, `WORKDIR`, `AGENT_PATH`.
-
-Uninstall:
-
-```sh
-launchctl unload ~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist
-rm ~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist
-```
+Environment overrides: `SIESTA_BIN`, `CONFIG_PATH`, `LOG_DIR`, `WORKDIR`, `AGENT_PATH`.
 
 ## Health
 

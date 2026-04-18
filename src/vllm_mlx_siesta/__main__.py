@@ -12,6 +12,7 @@ _OVERRIDE_FIELDS = (
     "listen_port",
     "upstream_host",
     "upstream_port",
+    "model",
     "upstream_cmd",
     "pause_after_seconds",
     "idle_timeout_seconds",
@@ -34,10 +35,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--upstream-host", dest="upstream_host")
     p.add_argument("--upstream-port", dest="upstream_port", type=int)
     p.add_argument(
+        "--model",
+        dest="model",
+        help=(
+            "Model name. Siesta synthesizes 'vllm-mlx serve --model MODEL --host "
+            "HOST --port PORT' if --upstream-cmd is not also given."
+        ),
+    )
+    p.add_argument(
         "--upstream-cmd",
         dest="upstream_cmd",
         nargs="+",
-        help="Command + args to launch the upstream vllm-mlx process",
+        help="Explicit command + args to launch the upstream (overrides --model synthesis)",
     )
     p.add_argument(
         "--pause-after-seconds",
@@ -67,12 +76,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             overrides[field] = value
     if overrides:
-        config = config.model_copy(update=overrides)
+        # Re-construct so the model_validator re-runs (model_copy skips validators).
+        merged = config.model_dump()
+        merged.update(overrides)
+        config = Config(**merged)
 
     if not config.upstream_cmd:
         print(
-            "error: upstream_cmd is required (set via --upstream-cmd, SIESTA_UPSTREAM_CMD, "
-            "or upstream_cmd in the TOML config)",
+            "error: upstream_cmd is required. Either pass --model MODEL (siesta will "
+            "synthesize a 'vllm-mlx serve' command), or set --upstream-cmd / "
+            "SIESTA_UPSTREAM_CMD / upstream_cmd in a TOML config.",
             file=sys.stderr,
         )
         return 2

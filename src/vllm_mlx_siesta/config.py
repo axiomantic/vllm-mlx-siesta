@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +22,10 @@ class Config(BaseSettings):
 
     upstream_host: str = "127.0.0.1"
     upstream_port: int = 8000
+    # Convenience: if set and ``upstream_cmd`` is empty, siesta synthesizes
+    # ``["vllm-mlx", "serve", "--model", <model>, "--host", <host>, "--port", <port>]``.
+    model: str | None = None
+    # Explicit command takes precedence over the synthesized one from ``model``.
     upstream_cmd: list[str] = Field(default_factory=list)
     upstream_env: dict[str, str] = Field(default_factory=dict)
 
@@ -38,6 +42,21 @@ class Config(BaseSettings):
 
     health_probe_path: str = "/v1/models"
     log_level: str = "INFO"
+
+    @model_validator(mode="after")
+    def _synthesize_upstream_cmd(self) -> Config:
+        if not self.upstream_cmd and self.model:
+            self.upstream_cmd = [
+                "vllm-mlx",
+                "serve",
+                "--model",
+                self.model,
+                "--host",
+                self.upstream_host,
+                "--port",
+                str(self.upstream_port),
+            ]
+        return self
 
     @classmethod
     def from_toml(cls, path: Path) -> Config:
