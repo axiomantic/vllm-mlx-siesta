@@ -2,13 +2,19 @@
 #
 # Render the LaunchAgent plist and load it via launchctl.
 #
+# Assumes siesta + vllm-mlx are already installed together in a shared venv.
+# The top-level install.sh handles that case automatically; use this script for
+# manual installs where you've already `pip install`ed both into one venv.
+#
 # Environment overrides (all optional):
-#   SIESTA_BIN    path to the vllm-mlx-siesta executable (default: which vllm-mlx-siesta)
+#   VENV_DIR      shared venv root (default: ~/.local/share/vllm-mlx-siesta/venv)
+#   SIESTA_BIN    path to vllm-mlx-siesta binary (default: $VENV_DIR/bin/vllm-mlx-siesta
+#                 if that exists, else `which vllm-mlx-siesta`)
 #   CONFIG_PATH   path to TOML config (default: ~/.config/vllm-mlx-siesta/config.toml)
 #   LOG_DIR       log directory (default: ~/Library/Logs/vllm-mlx-siesta)
 #   WORKDIR       working directory (default: $HOME)
 #   AGENT_PATH    PATH value injected into the LaunchAgent environment
-#                 (default: /usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin)
+#                 (default: <venv>/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin)
 
 set -euo pipefail
 
@@ -24,16 +30,36 @@ LABEL="com.axiomantic.vllm-mlx-siesta"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 PLIST_DEST="$LAUNCH_AGENTS/$LABEL.plist"
 
-SIESTA_BIN="${SIESTA_BIN:-$(command -v vllm-mlx-siesta || true)}"
-if [[ -z "$SIESTA_BIN" ]]; then
-  echo "error: vllm-mlx-siesta not found in PATH and SIESTA_BIN not set" >&2
+VENV_DIR="${VENV_DIR:-$HOME/.local/share/vllm-mlx-siesta/venv}"
+
+if [[ -z "${SIESTA_BIN:-}" ]]; then
+  if [[ -x "$VENV_DIR/bin/vllm-mlx-siesta" ]]; then
+    SIESTA_BIN="$VENV_DIR/bin/vllm-mlx-siesta"
+  else
+    SIESTA_BIN="$(command -v vllm-mlx-siesta || true)"
+  fi
+fi
+
+if [[ -z "$SIESTA_BIN" ]] || [[ ! -x "$SIESTA_BIN" ]]; then
+  echo "error: vllm-mlx-siesta binary not found" >&2
+  echo "  expected at $VENV_DIR/bin/vllm-mlx-siesta" >&2
+  echo "  or set SIESTA_BIN=<path>" >&2
   exit 1
+fi
+
+# Sanity check: if SIESTA_BIN is in a venv, make sure vllm-mlx is in the same venv.
+SIESTA_VENV_BIN_DIR="$(dirname "$SIESTA_BIN")"
+if [[ -f "$SIESTA_VENV_BIN_DIR/../pyvenv.cfg" ]]; then
+  if [[ ! -x "$SIESTA_VENV_BIN_DIR/vllm-mlx" ]]; then
+    echo "warning: vllm-mlx not found in the same venv as siesta" >&2
+    echo "         install it with: $SIESTA_VENV_BIN_DIR/pip install 'git+https://github.com/waybarrios/vllm-mlx.git'" >&2
+  fi
 fi
 
 CONFIG_PATH="${CONFIG_PATH:-$HOME/.config/vllm-mlx-siesta/config.toml}"
 LOG_DIR="${LOG_DIR:-$HOME/Library/Logs/vllm-mlx-siesta}"
 WORKDIR="${WORKDIR:-$HOME}"
-AGENT_PATH="${AGENT_PATH:-/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin}"
+AGENT_PATH="${AGENT_PATH:-$SIESTA_VENV_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin}"
 
 mkdir -p "$LAUNCH_AGENTS" "$LOG_DIR" "$(dirname "$CONFIG_PATH")"
 
@@ -54,5 +80,6 @@ echo "Installed $PLIST_DEST"
 echo "  Binary:  $SIESTA_BIN"
 echo "  Config:  $CONFIG_PATH (create this before launchctl load succeeds long-term)"
 echo "  Logs:    $LOG_DIR"
+echo "  PATH:    $AGENT_PATH"
 echo
 echo "Uninstall with: launchctl unload $PLIST_DEST && rm $PLIST_DEST"

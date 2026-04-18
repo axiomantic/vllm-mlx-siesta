@@ -12,11 +12,12 @@ curl -fsSL https://raw.githubusercontent.com/axiomantic/vllm-mlx-siesta/main/ins
 
 That will:
 
-1. Install [vllm-mlx](https://github.com/waybarrios/vllm-mlx) if it's not already on PATH.
-2. Install `vllm-mlx-siesta` via `uv tool` (or `pipx` if `uv` isn't present; installs `pipx` via Homebrew if neither is).
-3. Prompt you to pick a model — showing models already in your HuggingFace cache, plus RAM-appropriate recommendations, plus "type a custom id". Enter takes the recommendation. Add `--yes` or `--model MODEL` to skip the prompt.
-4. Write `~/.config/vllm-mlx-siesta/config.toml` (listen `:8080`, upstream `:8000`, pause after 60s, unload after 600s).
-5. Render `~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist` and `launchctl load` it, so siesta starts at every login.
+1. Create a shared venv at `~/.local/share/vllm-mlx-siesta/venv` (using `python3.11+`; installs via the first of `python3.13`/`3.12`/`3.11` it finds on PATH).
+2. `pip install` both [vllm-mlx](https://github.com/waybarrios/vllm-mlx) and `vllm-mlx-siesta` into that same venv, so siesta can spawn vllm-mlx without PATH gymnastics.
+3. Symlink `~/.local/bin/vllm-mlx-siesta` into the venv.
+4. Prompt you to pick a model — showing models already in your HuggingFace cache, plus RAM-appropriate recommendations, plus "type a custom id". Enter takes the recommendation. Add `--yes` or `--model MODEL` to skip the prompt.
+5. Write `~/.config/vllm-mlx-siesta/config.toml` (listen `:8080`, upstream `:8000`, pause after 60s, unload after 600s).
+6. Render `~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist` (with the venv's `bin/` first on `PATH`) and `launchctl load` it, so siesta starts at every login.
 
 After it finishes:
 
@@ -24,7 +25,7 @@ After it finishes:
 curl http://127.0.0.1:8080/healthz
 ```
 
-Add `--no-vllm-mlx` to the one-liner if you want to manage vllm-mlx yourself.
+Add `--no-vllm-mlx` to the one-liner if you want to manage vllm-mlx yourself — but note it must end up on the LaunchAgent's `PATH` (which starts with the shared venv's `bin/`), so the easiest path is still installing it into the same venv: `~/.local/share/vllm-mlx-siesta/venv/bin/pip install 'git+https://github.com/waybarrios/vllm-mlx.git'`.
 
 ### Changing model later
 
@@ -107,14 +108,31 @@ On each request: `siesta` resolves the current state, spawns or resumes the upst
 
 ## Running without the installer
 
-### Install manually
+### Install manually (shared venv)
+
+Siesta spawns `vllm-mlx` as a child process, so both tools need to live in the
+same venv — otherwise siesta's `subprocess.Popen(["vllm-mlx", ...])` won't find it.
 
 ```sh
-uv tool install "git+https://github.com/axiomantic/vllm-mlx-siesta"
-# or
-pipx install "git+https://github.com/axiomantic/vllm-mlx-siesta"
-# or, editable dev install:
-git clone https://github.com/axiomantic/vllm-mlx-siesta && cd vllm-mlx-siesta && pip install -e .
+# One shared venv for both tools:
+python3.12 -m venv ~/.local/share/vllm-mlx-siesta/venv
+VENV=~/.local/share/vllm-mlx-siesta/venv
+$VENV/bin/pip install --upgrade pip
+$VENV/bin/pip install "git+https://github.com/waybarrios/vllm-mlx.git"
+$VENV/bin/pip install "git+https://github.com/axiomantic/vllm-mlx-siesta.git"
+
+# Put siesta on your PATH:
+ln -sf $VENV/bin/vllm-mlx-siesta ~/.local/bin/vllm-mlx-siesta
+```
+
+Editable dev install (same principle, local clone):
+
+```sh
+git clone https://github.com/axiomantic/vllm-mlx-siesta && cd vllm-mlx-siesta
+python3.12 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/pip install "git+https://github.com/waybarrios/vllm-mlx.git"
+source .venv/bin/activate   # so spawned `vllm-mlx` resolves to the one in .venv
 ```
 
 ### Run
