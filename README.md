@@ -173,6 +173,16 @@ curl http://127.0.0.1:8080/healthz
 
 Returns supervisor state (`idle` / `starting` / `ready` / `paused` / `stopping`), upstream PID, in-flight request count, last-activity timestamp, and start/stop counters.
 
+## Logs
+
+Siesta inherits its stdout/stderr to any child `vllm-mlx` process, so one place captures everything:
+
+```sh
+tail -f ~/Library/Logs/vllm-mlx-siesta/vllm-mlx-siesta.err.log
+```
+
+You'll see siesta's supervisor lines (`Starting upstream: ...`, `Upstream ready (pid=...)`, pause/unload events) interleaved with vllm-mlx's own output (HuggingFace downloads, MLX load progress, request logs, any crash tracebacks). If cold start is slow or fails, this is the first place to look.
+
 ## Wake-up behavior
 
 - **From `paused`:** the first request sends `SIGCONT` and proceeds. Typically under 100ms. The KV cache is preserved because the process itself never died.
