@@ -38,8 +38,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--model",
         dest="model",
         help=(
-            "Model name. Siesta synthesizes 'vllm-mlx serve --model MODEL --host "
-            "HOST --port PORT' if --upstream-cmd is not also given."
+            "Model name. Siesta synthesizes 'vllm-mlx serve MODEL --host HOST "
+            "--port PORT' if --upstream-cmd is not also given."
         ),
     )
     p.add_argument(

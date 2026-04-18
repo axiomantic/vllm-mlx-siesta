@@ -19,6 +19,7 @@
 #   --idle N              SIGTERM after N seconds idle (default: 600)
 #   --ref REF             git ref to install from (default: main)
 #   --no-launchd          skip LaunchAgent install (config + binary only)
+#   --no-vllm-mlx         do NOT auto-install vllm-mlx if it's missing
 #   --uninstall           reverse the install
 
 set -euo pipefail
@@ -34,7 +35,9 @@ PAUSE=60
 IDLE=600
 REF="main"
 SKIP_LAUNCHD=0
+SKIP_VLLM_MLX=0
 UNINSTALL=0
+VLLM_MLX_REPO="https://github.com/waybarrios/vllm-mlx.git"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,6 +48,7 @@ while [[ $# -gt 0 ]]; do
     --idle) IDLE="$2"; shift 2 ;;
     --ref) REF="$2"; shift 2 ;;
     --no-launchd) SKIP_LAUNCHD=1; shift ;;
+    --no-vllm-mlx) SKIP_VLLM_MLX=1; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help) sed -n '3,25p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -62,59 +66,111 @@ CONFIG_DIR="$HOME/.config/vllm-mlx-siesta"
 CONFIG_PATH="$CONFIG_DIR/config.toml"
 LOG_DIR="$HOME/Library/Logs/vllm-mlx-siesta"
 
+ensure_python_installer() {
+  # Pick and echo: "uv", "pipx", or "" (failure). Installs pipx via brew if needed.
+  if command -v uv >/dev/null 2>&1; then
+    echo uv
+    return
+  fi
+  if command -v pipx >/dev/null 2>&1; then
+    echo pipx
+    return
+  fi
+  if command -v brew >/dev/null 2>&1; then
+    echo ">>  pipx not found; installing via homebrew" >&2
+    brew install pipx >&2
+    pipx ensurepath >&2 || true
+    echo pipx
+    return
+  fi
+  echo ""
+}
+
+install_python_tool() {
+  # install_python_tool <installer> <package-name> <pip-spec>
+  local installer="$1" name="$2" spec="$3"
+  case "$installer" in
+    uv)
+      uv tool install --force --python 3.11 "$spec"
+      ;;
+    pipx)
+      pipx install --force "$spec"
+      ;;
+    *)
+      echo "error: unknown installer '$installer'" >&2
+      return 1
+      ;;
+  esac
+}
+
+uninstall_python_tool() {
+  local name="$1"
+  if command -v uv >/dev/null 2>&1; then
+    uv tool uninstall "$name" 2>/dev/null || true
+  fi
+  if command -v pipx >/dev/null 2>&1; then
+    pipx uninstall "$name" 2>/dev/null || true
+  fi
+}
+
 if [[ $UNINSTALL -eq 1 ]]; then
   if [[ -f "$PLIST_DEST" ]]; then
     launchctl unload "$PLIST_DEST" 2>/dev/null || true
     rm -f "$PLIST_DEST"
     echo "removed $PLIST_DEST"
   fi
-  if command -v pipx >/dev/null 2>&1; then
-    pipx uninstall vllm-mlx-siesta 2>/dev/null || true
-  fi
-  if command -v uv >/dev/null 2>&1; then
-    uv tool uninstall vllm-mlx-siesta 2>/dev/null || true
-  fi
+  uninstall_python_tool vllm-mlx-siesta
+  echo "(vllm-mlx itself is left installed; remove manually if desired:"
+  echo "   uv tool uninstall vllm-mlx  /  pipx uninstall vllm-mlx )"
   echo "config kept at $CONFIG_PATH; remove manually if desired"
   exit 0
 fi
 
-# --- 1. Install the siesta binary ------------------------------------------------
+INSTALLER="$(ensure_python_installer)"
+if [[ -z "$INSTALLER" ]]; then
+  echo "error: need uv, pipx, or homebrew to install Python tools" >&2
+  echo "  https://github.com/astral-sh/uv  OR  https://pipx.pypa.io" >&2
+  exit 1
+fi
 
-if command -v uv >/dev/null 2>&1; then
-  echo ">> installing vllm-mlx-siesta via uv tool"
-  uv tool install --force --python 3.11 "git+$REPO@$REF"
-  SIESTA_BIN="$(uv tool dir)/vllm-mlx-siesta/bin/vllm-mlx-siesta"
-  [[ -x "$SIESTA_BIN" ]] || SIESTA_BIN="$HOME/.local/bin/vllm-mlx-siesta"
-elif command -v pipx >/dev/null 2>&1; then
-  echo ">> installing vllm-mlx-siesta via pipx"
-  pipx install --force "git+$REPO@$REF"
-  SIESTA_BIN="$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")/vllm-mlx-siesta"
+# --- 1. Install vllm-mlx (if missing) --------------------------------------------
+
+if command -v vllm-mlx >/dev/null 2>&1; then
+  echo ">> vllm-mlx already installed ($(command -v vllm-mlx))"
+elif [[ $SKIP_VLLM_MLX -eq 1 ]]; then
+  echo "!! vllm-mlx not found. --no-vllm-mlx set, skipping auto-install."
+  echo "   LaunchAgent will fail until you install it manually:"
+  echo "     $INSTALLER tool install git+$VLLM_MLX_REPO  (or pipx install ...)"
 else
-  if command -v brew >/dev/null 2>&1; then
-    echo ">> pipx not found; installing via homebrew"
-    brew install pipx
-    pipx ensurepath
-    pipx install --force "git+$REPO@$REF"
-    SIESTA_BIN="$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")/vllm-mlx-siesta"
-  else
-    echo "error: need uv, pipx, or homebrew to install siesta" >&2
-    echo "  https://github.com/astral-sh/uv  OR  https://pipx.pypa.io" >&2
-    exit 1
+  echo ">> installing vllm-mlx via $INSTALLER"
+  install_python_tool "$INSTALLER" vllm-mlx "git+$VLLM_MLX_REPO"
+  if ! command -v vllm-mlx >/dev/null 2>&1; then
+    echo "!! installed vllm-mlx but it's not on PATH yet."
+    echo "   A new shell (or sourcing your shell rc) should pick it up."
   fi
 fi
+
+# --- 2. Install the siesta binary ------------------------------------------------
+
+echo ">> installing vllm-mlx-siesta via $INSTALLER"
+install_python_tool "$INSTALLER" vllm-mlx-siesta "git+$REPO@$REF"
+
+case "$INSTALLER" in
+  uv)
+    SIESTA_BIN="$(uv tool dir 2>/dev/null)/vllm-mlx-siesta/bin/vllm-mlx-siesta"
+    [[ -x "$SIESTA_BIN" ]] || SIESTA_BIN="$HOME/.local/bin/vllm-mlx-siesta"
+    ;;
+  pipx)
+    SIESTA_BIN="$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")/vllm-mlx-siesta"
+    ;;
+esac
 
 if [[ ! -x "$SIESTA_BIN" ]]; then
   echo "warning: could not confirm siesta binary at $SIESTA_BIN"
   echo "         check your PATH; LaunchAgent may fail until the binary is found"
 fi
 
-if ! command -v vllm-mlx >/dev/null 2>&1; then
-  echo "!! vllm-mlx not found on PATH."
-  echo "   Install it before the LaunchAgent will successfully serve requests:"
-  echo "     https://github.com/waybarrios/vllm-mlx"
-fi
-
-# --- 2. Write config --------------------------------------------------------------
+# --- 3. Write config --------------------------------------------------------------
 
 mkdir -p "$CONFIG_DIR"
 if [[ -f "$CONFIG_PATH" ]]; then
@@ -137,7 +193,7 @@ fi
 
 mkdir -p "$LOG_DIR"
 
-# --- 3. LaunchAgent ---------------------------------------------------------------
+# --- 4. LaunchAgent ---------------------------------------------------------------
 
 if [[ $SKIP_LAUNCHD -eq 1 ]]; then
   echo ">> skipping LaunchAgent (--no-launchd)"

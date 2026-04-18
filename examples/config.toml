@@ -9,18 +9,19 @@ upstream_host = "127.0.0.1"
 upstream_port = 8000
 
 # The easy path: just name a model. Siesta synthesizes
-#   vllm-mlx serve --model <model> --host <upstream_host> --port <upstream_port>
+#   vllm-mlx serve <model> --host <upstream_host> --port <upstream_port>
+# (vllm-mlx takes the model as a positional arg.)
 model = "mlx-community/Qwen2.5-7B-Instruct-4bit"
 
 # The explicit path (takes precedence over `model` above). Uncomment to hand-roll
-# the command, e.g. for non-default flags or a different binary.
+# the command, e.g. to add --continuous-batching, --api-key, --reasoning-parser, etc.
 # upstream_cmd = [
 #     "vllm-mlx",
 #     "serve",
-#     "--model", "mlx-community/Qwen2.5-7B-Instruct-4bit",
+#     "mlx-community/Qwen2.5-7B-Instruct-4bit",
 #     "--host", "127.0.0.1",
 #     "--port", "8000",
-#     "--max-model-len", "8192",
+#     "--continuous-batching",
 # ]
 
 # Optional extra env vars for the child process.

@@ -12,9 +12,10 @@ curl -fsSL https://raw.githubusercontent.com/axiomantic/vllm-mlx-siesta/main/ins
 
 That will:
 
-1. Install `vllm-mlx-siesta` via `uv tool` (or `pipx` if `uv` isn't present; installs `pipx` via Homebrew if neither is).
-2. Write `~/.config/vllm-mlx-siesta/config.toml` with sensible defaults (`mlx-community/Qwen2.5-7B-Instruct-4bit`, listen `:8080`, upstream `:8000`, pause after 60s, unload after 600s).
-3. Render `~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist` and `launchctl load` it, so siesta starts at every login.
+1. Install [vllm-mlx](https://github.com/waybarrios/vllm-mlx) if it's not already on PATH.
+2. Install `vllm-mlx-siesta` via `uv tool` (or `pipx` if `uv` isn't present; installs `pipx` via Homebrew if neither is).
+3. Write `~/.config/vllm-mlx-siesta/config.toml` with sensible defaults (`mlx-community/Qwen2.5-7B-Instruct-4bit`, listen `:8080`, upstream `:8000`, pause after 60s, unload after 600s).
+4. Render `~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist` and `launchctl load` it, so siesta starts at every login.
 
 After it finishes:
 
@@ -22,7 +23,7 @@ After it finishes:
 curl http://127.0.0.1:8080/healthz
 ```
 
-You'll still need [vllm-mlx](https://github.com/waybarrios/vllm-mlx) itself on PATH. Siesta spawns it on demand but does not install it.
+Add `--no-vllm-mlx` to the one-liner if you want to manage vllm-mlx yourself.
 
 ### Pick a different model or ports
 

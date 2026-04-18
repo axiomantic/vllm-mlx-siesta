@@ -46,10 +46,10 @@ class Config(BaseSettings):
     @model_validator(mode="after")
     def _synthesize_upstream_cmd(self) -> Config:
         if not self.upstream_cmd and self.model:
+            # vllm-mlx takes the model as a positional arg (see its cli.py).
             self.upstream_cmd = [
                 "vllm-mlx",
                 "serve",
-                "--model",
                 self.model,
                 "--host",
                 self.upstream_host,
