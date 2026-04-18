@@ -40,7 +40,8 @@ idle_timeout_seconds = 600.0
 idle_check_interval_seconds = 10.0
 
 # Maximum time to wait for the upstream to answer the health probe during cold start.
-startup_timeout_seconds = 120.0
+# Large MLX models (20B+) loaded from a cold fs cache routinely need 2-4 minutes.
+startup_timeout_seconds = 300.0
 
 # SIGTERM grace period before escalating to SIGKILL.
 shutdown_grace_seconds = 10.0

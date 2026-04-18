@@ -113,11 +113,14 @@ class Supervisor:
         self._state = State.STARTING
         env = {**os.environ, **self._config.upstream_env}
         logger.info("Starting upstream: %s", " ".join(cmd))
+        # Inherit stdout/stderr so vllm-mlx's own logging (model download progress,
+        # MLX init, runtime errors) is visible. When running under LaunchAgent the
+        # plist redirects siesta's stdout/stderr to StandardOutPath/StandardErrorPath,
+        # so the upstream output lands in the same log files siesta writes to.
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
             env=env,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stdin=asyncio.subprocess.DEVNULL,
         )
         self._starts += 1
         try:

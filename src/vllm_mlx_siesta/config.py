@@ -37,7 +37,9 @@ class Config(BaseSettings):
     pause_after_seconds: float | None = 60.0
     idle_timeout_seconds: float = 600.0
     idle_check_interval_seconds: float = 10.0
-    startup_timeout_seconds: float = 120.0
+    # Generous default: cold-starting a 30B-class MLX model from a cold fs cache
+    # regularly takes 2-4 minutes (download + metal init + weight mmap).
+    startup_timeout_seconds: float = 300.0
     shutdown_grace_seconds: float = 10.0
 
     health_probe_path: str = "/v1/models"
