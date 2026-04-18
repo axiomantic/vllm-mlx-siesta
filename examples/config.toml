@@ -1,0 +1,43 @@
+# vllm-mlx-siesta example config
+#
+# Resolution order: CLI flags > SIESTA_* env vars > this file > built-in defaults.
+
+listen_host = "127.0.0.1"
+listen_port = 8080
+
+upstream_host = "127.0.0.1"
+upstream_port = 8000
+
+# Command + args that launch your vllm-mlx process. Must bind to
+# upstream_host:upstream_port and expose health_probe_path (default: /v1/models).
+upstream_cmd = [
+    "vllm-mlx",
+    "serve",
+    "--model", "mlx-community/Qwen2.5-7B-Instruct-4bit",
+    "--host", "127.0.0.1",
+    "--port", "8000",
+]
+
+# Optional extra env vars for the child process.
+[upstream_env]
+# HF_HOME = "/Users/you/.cache/huggingface"
+
+# Send SIGSTOP after this many seconds idle. Fast resume via SIGCONT on next
+# request, KV cache preserved. Set to 0 to disable the nap step and unload directly.
+pause_after_seconds = 60.0
+
+# SIGTERM after this many seconds idle (whether already paused or not).
+# RAM fully freed; next request cold-starts a new upstream process.
+idle_timeout_seconds = 600.0
+
+# How often the idle-watcher wakes to check.
+idle_check_interval_seconds = 10.0
+
+# Maximum time to wait for the upstream to answer the health probe during cold start.
+startup_timeout_seconds = 120.0
+
+# SIGTERM grace period before escalating to SIGKILL.
+shutdown_grace_seconds = 10.0
+
+health_probe_path = "/v1/models"
+log_level = "INFO"
