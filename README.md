@@ -14,8 +14,9 @@ That will:
 
 1. Install [vllm-mlx](https://github.com/waybarrios/vllm-mlx) if it's not already on PATH.
 2. Install `vllm-mlx-siesta` via `uv tool` (or `pipx` if `uv` isn't present; installs `pipx` via Homebrew if neither is).
-3. Write `~/.config/vllm-mlx-siesta/config.toml` with sensible defaults (`mlx-community/Qwen2.5-7B-Instruct-4bit`, listen `:8080`, upstream `:8000`, pause after 60s, unload after 600s).
-4. Render `~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist` and `launchctl load` it, so siesta starts at every login.
+3. Prompt you to pick a model — showing models already in your HuggingFace cache, plus RAM-appropriate recommendations, plus "type a custom id". Enter takes the recommendation. Add `--yes` or `--model MODEL` to skip the prompt.
+4. Write `~/.config/vllm-mlx-siesta/config.toml` (listen `:8080`, upstream `:8000`, pause after 60s, unload after 600s).
+5. Render `~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist` and `launchctl load` it, so siesta starts at every login.
 
 After it finishes:
 
@@ -24,6 +25,25 @@ curl http://127.0.0.1:8080/healthz
 ```
 
 Add `--no-vllm-mlx` to the one-liner if you want to manage vllm-mlx yourself.
+
+### Changing model later
+
+Either:
+
+```sh
+# A. Edit the config and reload the LaunchAgent
+$EDITOR ~/.config/vllm-mlx-siesta/config.toml
+launchctl kickstart -k gui/$UID/com.axiomantic.vllm-mlx-siesta
+```
+
+or:
+
+```sh
+# B. Re-run the installer (prompts again)
+curl -fsSL https://raw.githubusercontent.com/axiomantic/vllm-mlx-siesta/main/install.sh | bash -s -- --force
+```
+
+Browse all MLX-ready models: [huggingface.co/mlx-community](https://huggingface.co/mlx-community)
 
 ### Pick a different model or ports
 
