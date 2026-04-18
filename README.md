@@ -13,30 +13,31 @@ vllm-mlx gives high throughput on Apple Silicon but stays resident once loaded. 
 
 ## State machine
 
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> STARTING: request arrives<br/>(ensure_ready)
+    STARTING --> READY: health probe OK
+    STARTING --> IDLE: probe timeout<br/>or process exit
+    READY --> PAUSED: idle ≥ pause_after_seconds<br/>(SIGSTOP)
+    READY --> STOPPING: idle ≥ idle_timeout_seconds<br/>(SIGTERM, if pause disabled)
+    PAUSED --> READY: request arrives<br/>(SIGCONT, KV preserved)
+    PAUSED --> STOPPING: idle ≥ idle_timeout_seconds<br/>(SIGCONT + SIGTERM)
+    STOPPING --> IDLE: process exited
 ```
-          request               pause_after_seconds idle
-IDLE  ───────────────►  READY  ──────────────────────────►  PAUSED
-  ▲                     ▲ │                                   │
-  │                     │ │                                   │
-  │                  request                                  │
-  │   idle_timeout      │ │ idle_timeout_seconds idle         │
-  └─────────────────────┘ └───────────────────────────────────┘
-          (from READY, unload direct if pause disabled or exceeded)
-```
+
+The idle watcher only acts while `in_flight == 0`, so a streaming request that outlives the idle timer never gets paused or killed.
 
 ## How requests flow
 
+```mermaid
+flowchart LR
+    C[clients] -->|HTTP / OpenAI-compatible| S[siesta<br/>:8080]
+    S -->|httpx stream| U[vllm-mlx<br/>:8000]
+    S -. spawn / SIGSTOP / SIGCONT / SIGTERM .-> U
 ```
-clients  ─►  siesta (8080)  ─►  vllm-mlx (8000)
-                │
-                ├── spawn on first request after IDLE
-                ├── SIGCONT on first request after PAUSED (fast resume)
-                ├── bump last-activity + in-flight ref-count on each request
-                ├── single-flight cold start (concurrent first requests share one boot)
-                ├── SIGSTOP after pause_after_seconds idle (if enabled)
-                ├── SIGTERM after idle_timeout_seconds idle
-                └── GET /healthz exposes state / pid / counters
-```
+
+On each request: `siesta` resolves the current state, spawns or resumes the upstream as needed, increments an in-flight counter, streams the response, then decrements. An asyncio background task checks `now - last_activity` against `pause_after_seconds` and `idle_timeout_seconds` at `idle_check_interval_seconds` granularity.
 
 ## Install
 
