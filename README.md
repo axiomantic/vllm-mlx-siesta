@@ -16,13 +16,13 @@ That will:
 2. `pip install` both [vllm-mlx](https://github.com/waybarrios/vllm-mlx) and `vllm-mlx-siesta` into that same venv, so siesta can spawn vllm-mlx without PATH gymnastics.
 3. Symlink `~/.local/bin/vllm-mlx-siesta` into the venv.
 4. Prompt you to pick a model — showing models already in your HuggingFace cache, plus RAM-appropriate recommendations, plus "type a custom id". Enter takes the recommendation. Add `--yes` or `--model MODEL` to skip the prompt.
-5. Write `~/.config/vllm-mlx-siesta/config.toml` (listen `:8080`, upstream `:8000`, pause after 60s, unload after 600s).
+5. Write `~/.config/vllm-mlx-siesta/config.toml` (listen `:11435`, upstream `:11436`, pause after 60s, unload after 600s).
 6. Render `~/Library/LaunchAgents/com.axiomantic.vllm-mlx-siesta.plist` (with the venv's `bin/` first on `PATH`) and `launchctl load` it, so siesta starts at every login.
 
 After it finishes:
 
 ```sh
-curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:11435/healthz
 ```
 
 Add `--no-vllm-mlx` to the one-liner if you want to manage vllm-mlx yourself — but note it must end up on the LaunchAgent's `PATH` (which starts with the shared venv's `bin/`), so the easiest path is still installing it into the same venv: `~/.local/share/vllm-mlx-siesta/venv/bin/pip install 'git+https://github.com/waybarrios/vllm-mlx.git'`.
@@ -51,7 +51,7 @@ Browse all MLX-ready models: [huggingface.co/mlx-community](https://huggingface.
 ```sh
 curl -fsSL https://raw.githubusercontent.com/axiomantic/vllm-mlx-siesta/main/install.sh | bash -s -- \
   --model mlx-community/Llama-3.3-70B-Instruct-4bit \
-  --listen-port 8080 --upstream-port 8000 \
+  --listen-port 11435 --upstream-port 11436 \
   --pause 60 --idle 600
 ```
 
@@ -99,8 +99,8 @@ The idle watcher only acts while `in_flight == 0`, so a streaming request that o
 
 ```mermaid
 flowchart LR
-    C[clients] -->|HTTP / OpenAI-compatible| S[siesta<br/>:8080]
-    S -->|httpx stream| U[vllm-mlx<br/>:8000]
+    C[clients] -->|HTTP / OpenAI-compatible| S[siesta<br/>:11435]
+    S -->|httpx stream| U[vllm-mlx<br/>:11436]
     S -. spawn / SIGSTOP / SIGCONT / SIGTERM .-> U
 ```
 
@@ -143,7 +143,7 @@ One-liner with `--model`:
 vllm-mlx-siesta --model mlx-community/Qwen2.5-7B-Instruct-4bit
 ```
 
-Siesta synthesizes `vllm-mlx serve --model MODEL --host 127.0.0.1 --port 8000`. Add `--listen-port`, `--upstream-port`, `--pause-after-seconds`, `--idle-timeout-seconds` to tune.
+Siesta synthesizes `vllm-mlx serve --model MODEL --host 127.0.0.1 --port 11436`. Add `--listen-port`, `--upstream-port`, `--pause-after-seconds`, `--idle-timeout-seconds` to tune.
 
 With a config file:
 
@@ -153,7 +153,7 @@ vllm-mlx-siesta --config ~/.config/vllm-mlx-siesta/config.toml
 
 Settings resolve in this order: CLI flags > `SIESTA_*` env vars > TOML file > built-in defaults. See [`examples/config.toml`](examples/config.toml) for the full set of options.
 
-Point any OpenAI-compatible client at `http://127.0.0.1:8080/v1/...`.
+Point any OpenAI-compatible client at `http://127.0.0.1:11435/v1/...`.
 
 ### LaunchAgent without the installer
 
@@ -168,7 +168,7 @@ Environment overrides: `SIESTA_BIN`, `CONFIG_PATH`, `LOG_DIR`, `WORKDIR`, `AGENT
 ## Health
 
 ```sh
-curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:11435/healthz
 ```
 
 Returns supervisor state (`idle` / `starting` / `ready` / `paused` / `stopping`), upstream PID, in-flight request count, last-activity timestamp, and start/stop counters.

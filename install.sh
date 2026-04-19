@@ -15,8 +15,8 @@
 #
 # Flags:
 #   --model MODEL         HuggingFace model id (skip interactive selector)
-#   --listen-port N       siesta's listen port (default: 8080)
-#   --upstream-port N     vllm-mlx port (default: 8000)
+#   --listen-port N       siesta's listen port (default: 11435)
+#   --upstream-port N     vllm-mlx port (default: 11436)
 #   --pause N             SIGSTOP after N seconds idle (default: 60)
 #   --idle N              SIGTERM after N seconds idle (default: 600)
 #   --force               overwrite existing ~/.config/vllm-mlx-siesta/config.toml
@@ -40,8 +40,8 @@ VLLM_MLX_REPO="https://github.com/waybarrios/vllm-mlx.git"
 MLX_COMMUNITY_URL="https://huggingface.co/mlx-community"
 
 MODEL_CLI=""
-LISTEN_PORT=8080
-UPSTREAM_PORT=8000
+LISTEN_PORT=11435
+UPSTREAM_PORT=11436
 PAUSE=60
 IDLE=600
 REF="main"

@@ -18,10 +18,14 @@ class Config(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SIESTA_", extra="forbid")
 
     listen_host: str = "127.0.0.1"
-    listen_port: int = 8080
+    # 11435 slots in next to Ollama's conventional 11434 so the OpenAI-compatible
+    # endpoint is in the same mental ballpark as other local LLM servers, and
+    # avoids 8080's collisions with proxies, dev servers, and admin UIs.
+    listen_port: int = 11435
 
     upstream_host: str = "127.0.0.1"
-    upstream_port: int = 8000
+    # Internal-only; sequential with listen_port. Avoids 8000's ubiquity.
+    upstream_port: int = 11436
     # Convenience: if set and ``upstream_cmd`` is empty, siesta synthesizes
     # ``["vllm-mlx", "serve", "--model", <model>, "--host", <host>, "--port", <port>]``.
     model: str | None = None
