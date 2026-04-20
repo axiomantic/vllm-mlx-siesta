@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,8 +46,22 @@ class Config(BaseSettings):
     startup_timeout_seconds: float = 300.0
     shutdown_grace_seconds: float = 10.0
 
+    # Cap concurrent in-flight requests forwarded to the upstream. MLX's
+    # allocation_limit is a soft cap -- Metal will over-allocate under pressure
+    # and a command-buffer error aborts the whole process. Queueing at the proxy
+    # keeps the working-set bounded. 4 is sane for a 14B 4-bit model on 48GB
+    # unified memory; drop to 2 for 30B, bump to 8 for 7B.
+    max_concurrent_upstream: int = 4
+
     health_probe_path: str = "/v1/models"
     log_level: str = "INFO"
+
+    @field_validator("max_concurrent_upstream")
+    @classmethod
+    def _validate_concurrency(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_concurrent_upstream must be >= 1")
+        return v
 
     @model_validator(mode="after")
     def _synthesize_upstream_cmd(self) -> Config:

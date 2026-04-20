@@ -68,6 +68,32 @@ async def test_in_flight_defers_shutdown(config_factory: Callable[..., Config]) 
 
 
 @pytest.mark.asyncio
+async def test_request_slot_semaphore_caps_in_flight(
+    config_factory: Callable[..., Config],
+) -> None:
+    sup = Supervisor(config_factory(max_concurrent_upstream=2))
+    try:
+        peak = 0
+        release = asyncio.Event()
+
+        async def worker() -> None:
+            nonlocal peak
+            async with sup.request_slot():
+                peak = max(peak, sup.stats().in_flight)
+                await release.wait()
+
+        tasks = [asyncio.create_task(worker()) for _ in range(4)]
+        await asyncio.sleep(0.1)
+        assert sup.stats().in_flight == 2
+        assert peak == 2
+        release.set()
+        await asyncio.gather(*tasks)
+        assert sup.stats().in_flight == 0
+    finally:
+        await sup.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_single_flight_startup(config_factory: Callable[..., Config]) -> None:
     sup = Supervisor(config_factory())
     try:

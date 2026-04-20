@@ -54,6 +54,11 @@ class Supervisor:
         self._idle_task: asyncio.Task[None] | None = None
         self._starts = 0
         self._stops = 0
+        # Bounds concurrent upstream requests: surplus callers wait in
+        # request_slot before in_flight is bumped, so the idle watcher still
+        # sees accurate in-flight counts and paused/running work isn't gated
+        # on queued work.
+        self._inflight_sem = asyncio.Semaphore(config.max_concurrent_upstream)
 
     def stats(self) -> SupervisorStats:
         return SupervisorStats(
@@ -158,7 +163,12 @@ class Supervisor:
 
     @asynccontextmanager
     async def request_slot(self) -> AsyncIterator[None]:
-        """Mark a request as in-flight; defers idle shutdown until exit."""
+        """Mark a request as in-flight; defers idle shutdown until exit.
+
+        Blocks on the concurrency semaphore first; the in_flight counter only
+        covers requests actually forwarded to the upstream.
+        """
+        await self._inflight_sem.acquire()
         self._in_flight += 1
         self._last_activity = time.monotonic()
         try:
@@ -166,6 +176,7 @@ class Supervisor:
         finally:
             self._in_flight -= 1
             self._last_activity = time.monotonic()
+            self._inflight_sem.release()
 
     async def start_idle_watcher(self) -> None:
         if self._idle_task is not None and not self._idle_task.done():
