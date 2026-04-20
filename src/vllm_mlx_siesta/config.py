@@ -44,7 +44,11 @@ class Config(BaseSettings):
     # Generous default: cold-starting a 30B-class MLX model from a cold fs cache
     # regularly takes 2-4 minutes (download + metal init + weight mmap).
     startup_timeout_seconds: float = 300.0
-    shutdown_grace_seconds: float = 10.0
+    # SIGTERM -> SIGKILL grace. Needs to cover vllm-mlx finishing in-flight
+    # streams AND Metal releasing allocator state -- 10s was too tight and left
+    # orphan processes holding GBs of weights when LaunchAgent reloads raced
+    # ahead of cleanup.
+    shutdown_grace_seconds: float = 60.0
 
     # Cap concurrent in-flight requests forwarded to the upstream. MLX's
     # allocation_limit is a soft cap -- Metal will over-allocate under pressure
