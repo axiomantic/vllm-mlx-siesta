@@ -106,6 +106,15 @@ flowchart LR
 
 On each request: `siesta` resolves the current state, spawns or resumes the upstream as needed, increments an in-flight counter, streams the response, then decrements. An asyncio background task checks `now - last_activity` against `pause_after_seconds` and `idle_timeout_seconds` at `idle_check_interval_seconds` granularity.
 
+## Concurrency
+
+By default `siesta` forwards at most one request to `vllm-mlx` at a time. Anything beyond that queues on an asyncio semaphore until the in-flight request completes. This sounds conservative, but MLX continuous batching behaves worse under concurrency than you'd hope:
+
+- Decode bandwidth gets split across in-flight requests, so two concurrent streams each ran ~10x slower than one solo stream on our test rig.
+- Under sustained pressure the Metal allocator over-commits and aborts the whole `vllm-mlx` process with an uncatchable command-buffer error (`rc=-6`). The supervisor recovers by restarting, but you pay a 5-15s cold start and lose any in-flight requests.
+
+Tune `max_concurrent_upstream` upward only after you've confirmed the model and memory budget hold up under real load. A 7B 4-bit model on 48GB unified memory can often handle 2-4 comfortably; 30B+ models or tighter budgets should stay at 1.
+
 ## Running without the installer
 
 ### Install manually (shared venv)
@@ -185,7 +194,7 @@ You'll see siesta's supervisor lines (`Starting upstream: ...`, `Upstream ready 
 
 ## Wake-up behavior
 
-- **From `paused`:** the first request sends `SIGCONT` and proceeds. Typically under 100ms. The KV cache is preserved because the process itself never died.
+- **From `paused`:** the first request sends `SIGCONT` and proceeds, typically under 100ms. The KV cache is preserved because the process itself never died.
 - **From `idle`:** the first request spawns a new vllm-mlx process and blocks on its health probe (`/v1/models` by default). Usually 5–15s on Apple Silicon because MLX mmaps safetensors and macOS's buffer cache keeps the weight bytes resident across the restart — only process init and Metal context setup pay real cost.
 - If startup fails (bad command, port conflict, model OOM), the request returns `503` with `Retry-After: 5` so well-behaved clients retry.
 

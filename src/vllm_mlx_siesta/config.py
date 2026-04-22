@@ -50,12 +50,15 @@ class Config(BaseSettings):
     # ahead of cleanup.
     shutdown_grace_seconds: float = 60.0
 
-    # Cap concurrent in-flight requests forwarded to the upstream. MLX's
-    # allocation_limit is a soft cap -- Metal will over-allocate under pressure
-    # and a command-buffer error aborts the whole process. Queueing at the proxy
-    # keeps the working-set bounded. 4 is sane for a 14B 4-bit model on 48GB
-    # unified memory; drop to 2 for 30B, bump to 8 for 7B.
-    max_concurrent_upstream: int = 4
+    # Cap concurrent in-flight requests forwarded to the upstream. Two problems
+    # stack on top of each other with MLX continuous batching: per-request
+    # latency collapses as the decode bandwidth gets split across the batch
+    # (solo 2-3s vs 20-80s at three concurrent on our test box), and the
+    # Metal allocator can abort the whole vllm-mlx process with an
+    # uncatchable command-buffer error once contention spikes.
+    # Serializing at the proxy avoids both. Bump it only if you've tested
+    # that your model + memory budget stays stable under concurrent load.
+    max_concurrent_upstream: int = 1
 
     health_probe_path: str = "/v1/models"
     log_level: str = "INFO"

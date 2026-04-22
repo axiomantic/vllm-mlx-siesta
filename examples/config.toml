@@ -48,11 +48,13 @@ startup_timeout_seconds = 300.0
 # and orphaned vllm-mlx children on LaunchAgent reloads.
 shutdown_grace_seconds = 60.0
 
-# Cap concurrent upstream requests. MLX's allocation_limit is a soft cap and
-# Metal will over-allocate under concurrent pressure, aborting the process via
-# an uncatchable command-buffer error. Queueing at the proxy bounds the working
-# set. Guidance: 4 for 14B 4-bit on 48GB; 2 for 30B; 6-8 for 7B.
-max_concurrent_upstream = 4
+# Cap concurrent upstream requests; the rest queue on an asyncio semaphore.
+# MLX's continuous batcher splits decode bandwidth across in-flight requests,
+# so two streams at once run much slower than one solo stream. Worse, under
+# concurrent pressure the Metal allocator can abort the vllm-mlx process with
+# an uncatchable command-buffer error. Default 1 serializes cleanly. Raise
+# only after you've confirmed the model + memory budget holds up under load.
+max_concurrent_upstream = 1
 
 health_probe_path = "/v1/models"
 log_level = "INFO"
